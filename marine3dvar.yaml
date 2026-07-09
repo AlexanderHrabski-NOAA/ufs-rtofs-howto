@@ -1,0 +1,29 @@
+defaults:
+  !INC {{ HOMEglobal }}/dev/parm/config/gfs/yaml/defaults.yaml
+
+base:
+  DOIAU: "YES"
+  DO_JEDIATMVAR: "NO"
+  DO_JEDIATMENS: "NO"
+  DO_JEDIOCNVAR: "YES"
+  DO_JEDISNOWDA: "NO"
+  DO_MERGENSST: "NO"
+  DOHYBVAR: "NO"
+  DO_FIT2OBS: "YES"
+  DO_VERFOZN: "YES"
+  DO_VERFRAD: "YES"
+  FHMAX_GFS: 240
+
+prepoceanobs:
+  use_exp_obs: "YES"
+  dmpdir_exp: /scratch3/NCEPDEV/da/common_obsForge
+
+marinebmat:
+  SOCA_INPUT_FIX_DIR: {{ HOMEglobal }}/fix/gdas/soca/1440x1080x75/soca
+  SOCA_ANL_GEOM: {{ HOMEglobal }}/fix/gdas/soca/720x540x75/soca
+
+marineanl:
+  SOCA_INPUT_FIX_DIR: {{ HOMEglobal }}/fix/gdas/soca/1440x1080x75/soca
+  SOCA_ANL_GEOM: {{ HOMEglobal }}/fix/gdas/soca/720x540x75/soca
+  SOCA_OBS_LIST: {{ HOMEglobal }}/parm/gdas/marine/obs/obs_list_gfsv17.yaml.j2
+  SOCA_NINNER: 100
