@@ -13,8 +13,8 @@ base:
   DO_VERFOZN: "YES"
   DO_VERFRAD: "YES"
   FHMAX_GFS: 240
-  FIXorog: /scratch4/NCEPDEV/marine/Alexander.Hrabski/experiment/FIXorog
-  FIXcpl: /scratch4/NCEPDEV/marine/Alexander.Hrabski/experiment/FIXcpl
+  FIXorog: /scratch4/NCEPDEV/marine/Alexander.Hrabski/experiment_setup/FIXorog
+  FIXcpl: /scratch4/NCEPDEV/marine/Alexander.Hrabski/experiment_setup/FIXcpl
 
 prepoceanobs:
   use_exp_obs: "YES"
