@@ -13,7 +13,7 @@ experiment:
   idate: 2026012700
   edate: 2026021900
   icsdir: /scratch3/NCEPDEV/da/Mindo.Choi/expts/IC/cp4.03-parallel-3dvar/
-  yaml: /scratch3/NCEPDEV/da/Guillaume.Vernieres/runs/gfs-dev/marine3dvar.yaml
+  yaml: /scratch4/NCEPDEV/marine/Alexander.Hrabski/experiment/marine3dvar.yaml
 
 workflow:
   engine: rocoto
