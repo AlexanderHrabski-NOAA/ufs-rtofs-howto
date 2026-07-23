@@ -15,6 +15,8 @@ base:
   FHMAX_GFS: 240
   FIXorog: /scratch4/NCEPDEV/marine/Alexander.Hrabski/experiment_setup/FIXorog
   FIXcpl: /scratch4/NCEPDEV/marine/Alexander.Hrabski/experiment_setup/FIXcpl
+  FIXmom: /scratch4/NCEPDEV/marine/Alexander.Hrabski/experiment_setup/FIXmom
+  FIXcice: /scratch4/NCEPDEV/marine/Alexander.Hrabski/experiment_setup/FIXcice
 
 prepoceanobs:
   use_exp_obs: "YES"
