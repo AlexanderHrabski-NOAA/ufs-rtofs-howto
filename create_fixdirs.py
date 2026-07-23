@@ -4,6 +4,7 @@ import os
 import sys
 import shutil
 import argparse
+import yaml
 from pathlib import Path
 
 # ==========================================
@@ -17,15 +18,11 @@ def force_symlink(src: str, dst: str) -> None:
     os.symlink(src, dst)
 
 def link_tree(src_dir: Path, dest_dir: Path) -> None:
-    """
-    Replicates `cp -rsf src_dir/* dest_dir/`.
-    Recursively recreates the directory structure and symlinks all files.
-    """
+    """Replicates `cp -rsf src_dir/* dest_dir/`."""
     if not src_dir.exists():
         print(f"Warning: Source directory '{src_dir}' does not exist. Skipping.")
         return
     
-    # shutil.copytree with a custom copy_function perfectly mimics `cp -rsf`
     shutil.copytree(
         src=src_dir, 
         dst=dest_dir, 
@@ -34,9 +31,7 @@ def link_tree(src_dir: Path, dest_dir: Path) -> None:
     )
 
 def link_file(src_file: Path, dest_file: Path) -> None:
-    """
-    Replicates `ln -sf src_file dest_file` after safely creating parent directories.
-    """
+    """Replicates `ln -sf src_file dest_file`."""
     if not src_file.exists():
         print(f"Warning: Overlay source '{src_file}' does not exist. Skipping.")
         return
@@ -50,87 +45,59 @@ def link_file(src_file: Path, dest_file: Path) -> None:
 def main():
     # --- Argument Parsing & Validation ---
     parser = argparse.ArgumentParser(description="Build and overlay directory trees via symlinks.")
-    parser.add_argument("destination", type=Path, help="Absolute or relative path to the destination directory")
+    parser.add_argument("config", type=Path, help="Path to the YAML configuration file")
+    parser.add_argument("destination", type=Path, help="Path to the destination directory")
     args = parser.parse_args()
 
-    dest_dir = args.destination.resolve() # Gets absolute path
+    # Load YAML config
+    if not args.config.exists():
+        sys.exit(f"Error: Configuration file '{args.config}' not found.")
+        
+    with open(args.config, 'r') as f:
+        try:
+            config = yaml.safe_load(f)
+        except yaml.YAMLError as exc:
+            sys.exit(f"Error parsing YAML: {exc}")
 
+    dest_dir = args.destination.resolve()
     if dest_dir.exists() and not dest_dir.is_dir():
         sys.exit(f"Error: '{dest_dir}' already exists but is a file, not a directory.")
-
     dest_dir.mkdir(parents=True, exist_ok=True)
 
-    # --- Configuration ---
-    OVERLAY_DIR = Path("/scratch4/NCEPDEV/marine/Alexander.Hrabski/FIX_highres_mom6_cic6")
-
-    # Define base configurations in a dictionary to prevent repeated code
-    bases = {
-        "OROG": {
-            "src": Path("/scratch3/NCEPDEV/global/role.glopara/fix/orog/20240917"),
-            "dst": dest_dir / "FIXorog"
-        },
-        "CPL": {
-            "src": Path("/scratch3/NCEPDEV/global/role.glopara/fix/cpl/20230526"),
-            "dst": dest_dir / "FIXcpl"
-        },
-        "MOM": {
-            "src": Path("/scratch3/NCEPDEV/global/role.glopara/fix/mom6/20250128"),
-            "dst": dest_dir / "FIXmom"
-        },
-        "CICE": {
-            "src": Path("/scratch3/NCEPDEV/global/role.glopara/fix/cice/20240416"),
-            "dst": dest_dir / "FIXcice"
-        }
-    }
-
-    # Define overlays in a list of instructions
-    overlays = [
-        {
-            "name": "OROG directory",
-            "type": "tree",
-            "src": OVERLAY_DIR,
-            "dst": dest_dir / "FIXorog"
-        },
-        {
-            "name": "CPL grid_spec.nc",
-            "type": "file",
-            "src": OVERLAY_DIR / "C384" / "C384_mosaic.nc",
-            "dst": dest_dir / "FIXcpl" / "aC384o008" / "grid_spec.nc"
-        },
-        {
-            "name": "MOM zgrid interpolant",
-            "type": "file",
-            "src": OVERLAY_DIR / "MOM" / "interpolate_zgrid_30L.nc",
-            "dst": dest_dir / "FIXmom" / "008" / "interpolate_zgrid_30L.nc"
-        },
-        {
-            "name": "oceanda zgrid interpolant",
-            "type": "file",
-            "src": OVERLAY_DIR / "MOM" / "oceanda_zgrid_75L.nc",
-            "dst": dest_dir / "FIXmom" / "008" / "oceanda_zgrid_75L.nc"
-        },
-        #{
-        #    "name": "CICE specific files",
-        #    "type": "file",
-        #    "src": OVERLAY_DIR / "CICE" / "specific_cice_file.nc",
-        #    "dst": dest_dir / "FIXcice" / "specific_cice_file.nc"
-        #}
-    ]
+    overlay_base = Path(config.get("overlay_dir", ""))
 
     # --- 3. Build the Base Tree ---
     print(f"Building base tree in {dest_dir}...")
+    bases = config.get("bases", {})
     for name, paths in bases.items():
         print(f"  -> Linking {name} base...")
-        link_tree(paths["src"], paths["dst"])
+        src = Path(paths["src"])
+        dst = dest_dir / paths["dst"]
+        
+        # Make sure parent base directories exist before linking
+        dst.mkdir(parents=True, exist_ok=True)
+        link_tree(src, dst)
 
     # --- 4. Apply the Overlays ---
-    print(f"\nApplying overlays from {OVERLAY_DIR}...")
+    print("\nApplying overlays...")
+    overlays = config.get("overlays", [])
     for overlay in overlays:
         print(f"  -> Overlaying {overlay['name']}...")
+        
+        # Resolve source path
+        src = Path(overlay["src"])
+        if not src.is_absolute() and overlay_base.name:
+            src = (overlay_base / src).resolve()
+
+        # Resolve destination path
+        dst = dest_dir / overlay["dst"]
+
         if overlay["type"] == "tree":
-            link_tree(overlay["src"], overlay["dst"])
+            link_tree(src, dst)
         elif overlay["type"] == "file":
-            link_file(overlay["src"], overlay["dst"])
+            link_file(src, dst)
+        else:
+            print(f"  [!] Unknown overlay type '{overlay['type']}'. Skipping.")
 
     print(f"\nSuccess! Base trees and overlays linked to {dest_dir}.")
 
