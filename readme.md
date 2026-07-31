@@ -10,7 +10,7 @@ Edit the `coupled.exp.yaml` configuration:
 - `icdir` should point to your prepared initial conditions
 - `yaml` to your `marine3dvar.yaml`
 
-Then, clone the following branch of Alex's fork of the global workflow _in a space large enough to store the GFS/GDAS executables_:
+Note that the `icdir` will need to include 8 km CICE6 and MOM6 restart files, as well their corresponding increments. Alex H. has a set of ICs suitable for testing that the workflow runs, but the components are taken from different dates. A utility `generate_zero_inc.py` can be used to generate an increment file for MOM6 of all zeros. Once the ICs have been set/constructed, clone the following branch of Alex's fork of the global workflow _in a space large enough to store the GFS/GDAS executables_:
 
 ```bash
 git clone https://github.com/AlexanderHrabski-NOAA/global-workflow.git -b feature/highres_mom6cic6 --recurse-submodules -j 4
@@ -36,6 +36,8 @@ Once these directories are generated, you will need to provide their path in `ma
 base:
   FIXorog: /path/to/FIXorog
   FIXcpl: /path/to/FIXcpl
+  FIXmom: /path/to/FIXmom
+  FIXcice: /path/to/FIXcice
 ```
 
 We are now ready to generate the experiment. First, you'll want to source the global workflow setup script:
