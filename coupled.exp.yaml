@@ -12,8 +12,8 @@ experiment:
   expdir: {{ 'RUNDIR' | getenv }}/ufs-rtofs/EXPDIR
   idate: 2026012700
   edate: 2026021900
-  icsdir: /scratch3/NCEPDEV/da/Mindo.Choi/expts/IC/cp4.03-parallel-3dvar/
-  yaml: /scratch4/NCEPDEV/marine/Alexander.Hrabski/experiment_setup/marine3dvar.yaml
+  icsdir: /gpfs/f6/sfs-cpu/world-shared/Alexander.Hrabski/IC/cp4.03-parallel-3dvar/
+  yaml: /gpfs/f6/sfs-cpu/world-shared/Alexander.Hrabski/experiment_setup/marine3dvar.yaml
 
 workflow:
   engine: rocoto
