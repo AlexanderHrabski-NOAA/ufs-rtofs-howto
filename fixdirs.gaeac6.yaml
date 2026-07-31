@@ -14,7 +14,7 @@ bases:
     src: /gpfs/f6/drsa-precip3/world-shared/role.glopara/fix/orog/20240917
     dst: FIXorog  # Creates <destination_directory>/FIXorog
   CPL:
-    src: /gpfs/f6/drsa-precip3/world-shared/role.glopara/fix/cice/20240416
+    src: /gpfs/f6/drsa-precip3/world-shared/role.glopara/fix/cpl/20230526
     dst: FIXcpl   # Creates <destination_directory>/FIXcpl
   MOM:
     src: /gpfs/f6/drsa-precip3/world-shared/role.glopara/fix/mom6/20250128
@@ -33,13 +33,13 @@ bases:
 overlays:
   - name: OROG directory
     type: tree
-    src: .  
+    src: OROG
     dst: FIXorog
 
-  - name: CPL grid_spec.nc
-    type: file
-    src: C384/C384_mosaic.nc
-    dst: FIXcpl/aC384o008/grid_spec.nc
+  - name: CPL directory
+    type: tree
+    src: CPL
+    dst: FIXcpl
 
   - name: hgrid rename
     type: file
