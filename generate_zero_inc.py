@@ -5,12 +5,23 @@ Placeholder to satisfy MOM6's ODA_INCUPD size check while the SOCA 008 geometry 
 Temp/Salt/u/v/ave_ssh = 0 (increments are added -> no-op); h > 0 (apply path divides by sum(h)).
 Written in Z-slabs so peak RAM ~240 MB even though the file is ~24 GB.
 """
+import os
+import argparse
 import numpy as np
 from netCDF4 import Dataset
 
+# Parse command line arguments
+parser = argparse.ArgumentParser(description="Generate a ZERO-valued MOM6 ODA increment file.")
+parser.add_argument("outdir", type=str, help="Directory in which to place the generated file")
+parser.add_argument("cycle", type=str, help="Cycle time string (e.g., 00, 06, 12, 18)")
+args = parser.parse_args()
+
+# Ensure the output directory exists
+os.makedirs(args.outdir, exist_ok=True)
+
 NX, NY, NZ = 4500, 3297, 41     # xaxis_1 (lonh), yaxis_1 (lath), zaxis_1
 HREF = 100.0                    # any > 0 thickness [m]; value irrelevant since increments are 0
-OUT  = "gdas.t18z.mom6_increment.i006.nc"
+OUT  = os.path.join(args.outdir, f"gdas.t{args.cycle}z.mom6_increment.i006.nc")
 COMPRESS = False                # set True for zlib (all-zeros -> tiny file) if your FMS reads it
 
 nc = Dataset(OUT, "w", format="NETCDF4")
@@ -57,4 +68,3 @@ assh[0, :, :] = zero_slab
 nc.filename = "zero_increment_008_placeholder"
 nc.close()
 print(f"wrote {OUT}: {NX}x{NY}x{NZ}, h={HREF} (>0), Temp/Salt/u/v/ave_ssh = 0")
-
