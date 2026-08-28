@@ -1,30 +1,21 @@
-## Build and Prepare a Coupled 3DVar FGAT (C384 Atmosphere + 1/12 Ocean)
+# Build and Prepare a Coupled 3DVar FGAT (C384 Atmosphere + 1/12 Ocean)
 
-Clone this repository to the location you would like to keep the experiment configuration:
+## Setup
+
+In order to use this workflow, a series of fix files, ICs, and configuration files must be correctly set up. This repository contains the needed files and utilities to do so. Begin by cloning this repository to the location you would like to keep the experiment configuration and entering it:
 
 ```bash
 git clone https://github.com/AlexanderHrabski-NOAA/ufs-rtofs-howto.git
+cd ufs-rtofs-howto
 ```
 
-Edit the `coupled.exp.yaml` configuration:
-- `icdir` should point to your prepared initial conditions
-- `yaml` to your `marine3dvar.yaml`
+Note the two global workflow configuration files `coupled.exp.yaml` and `marine3dvar.yaml` which will edited as part of this setup. In the next subsection, we'll cover how to set up the fix files. 
 
-Note that the `icdir` will need to include 8 km CICE6 and MOM6 restart files, as well their corresponding increments. Alex H. has a set of ICs suitable for testing that the workflow runs, but the components are taken from different dates. A utility `generate_zero_inc.py` can be used to generate an increment file for MOM6 of all zeros. Once the ICs have been set/constructed, clone the following branch of Alex's fork of the global workflow _in a space large enough to store the GFS/GDAS executables_:
+### Fix file setup
 
-```bash
-git clone https://github.com/AlexanderHrabski-NOAA/global-workflow.git -b feature/highres_mom6cic6 --recurse-submodules -j 4
-```
+Due to the increase in resolution and the difference in MOM6 configuration, this workflow needs fix files that are not present in the standard system fix file paths. `./create_fixdirs.py` is a utility that stages these additional files from a known location into a mirror of the relevant system fix file directories. We will call the mirror with the additional files an "overlay". The `fixdirs.<machine>.yaml` files are configuration files that contain the instructions for generting these overlays on each supported machine. Note that this script only links to existing high resolution fix files. It does not generate new fix files. In order to add support for a new machine, see the instructions in ...
 
-You'll need to build and install the global workflow before it can be used. See `./build_all.sh -h` or [the documentation](https://global-workflow.readthedocs.io/en/latest/user_guide/clone.html#build-components) for more options. This may take a while.
-
-```bash
-cd global-workflow/sorc/
-./build_all.sh gfs gdas
-./link_workflow.sh
-```
-
-Next, you will need to setup the needed fix file overlays. Navigate back to `/path/to/ufs-rotfs-howto` and run the overlay generator via `./create_fixdirs.py fixdirs.<machine>.yaml <dest>`. I choose to put these directories alongside my experiment configuration with the below command. Note that this script only links to existing high resolution fix files in a known location. It does not generate new fix files.
+Run the overlay generator via `./create_fixdirs.py fixdirs.<machine>.yaml <dest>`. I choose to put these directories alongside my experiment configuration with the below command. 
 
 ```bash
 ./create_fixdirs.py fixdirs.<machine>.yaml .
@@ -40,9 +31,59 @@ base:
   FIXcice: /path/to/FIXcice
 ```
 
-We are now ready to generate the experiment. First, you'll want to source the global workflow setup script:
+### IC setup
+
+Next, we will cover the setup of warm start ICs for this workflow. Because this workflow hasn't been run to produce useable ICs for a warm start, we must construct warm start ICs by hand. 
+
+There are many options for how to do this. Here, I'll outline the procedure I've used to create a suffeciently valid set of ICs such that the first half-cycle of the workflow runs to completion. While creating these ICs were necissary to ensure the workflow would run when a physically consistent set of ICs are provided, this procedure does not produce ICs suitable for science and should be replaced with a better one.
+
+We will take files from two sources:
+- A 25km ocean/ice coupled atmosphere runs (verify exactly what this is)
+- A 8km ocean/ice data atmosphere runs (RTOFS)
+
+The coupled atmosphere (CATM) runs will provide the necissary directory structure and the atmospheric restart files. The data atmosphere (DATM) runs will provide the necissary high-resolution ocean/ice restart files that are not present in the CATM data. I've staged these two sets of restarts in the following directories:
+
+On GAEA C6:
+- CATM: `/gpfs/f6/sfs-cpu/world-shared/Alexander.Hrabski/IC/cp4.03-parallel-3dvar`
+- DATM: `/gpfs/f6/sfs.cpu/world-shared/Alexander.Hrabski/IC/rtofs.20251225`
+
+On Ursa:
+...
+
+The ICs must also include analysis files. For now, we take the increment to be zero, and we construct a zero increment file for MOM6 to read. For CICE, the increment is already applied to the restart, so we simply link the analysis file to the restart file to achieve a zero increment.
+
+Finally, the mediator also has a warm start option, in which it reads a mediator restart file. In this case, neither source of restarts contains a suitable file. The DATM mediator restart is missing coupling fields, and the CATM restart is at to coarse a resolution. As a temporary workaround, we cold start the mediator, which is done automatically if a mediator restart isn't found in the ICs.
+
+The `create_icss.py` script constructs the ICs directly from these two sources according to the above description. It can be called via:
+
+```bash
+source /path/to/global-workflow/dev/ush/load_modules.sh
+./create_ics.py /path/to/IC/rtofs.20251225 /path/to/IC/cp4.03-parallel-3dvar /path/to/IC/coupled-8km-ics 
+```
+Once this is generated, edit the `coupled.exp.yaml` configuration so that `icdir: /path/to/IC/coupled-8km-ics` points to your prepared initial conditions.
+
+### Global Workflow Setup
+
+The global workflow is configured via the two files `coupled.exp.yaml` and `marine3dvar.yaml`. In addition to the changes we've already made, you'll need to edit the `coupled.exp.yaml` configuration so that `yaml: marine3dvar.yaml`. Once this has been done, clone the following branch of Alex's fork of the global workflow _in a space large enough to store the GFS/GDAS executables_:
+
+```bash
+git clone https://github.com/AlexanderHrabski-NOAA/global-workflow.git -b feature/highres_mom6cic6 --recurse-submodules -j 4
+```
+
+You'll need to build and install the global workflow before it can be used. See `./build_all.sh -h` or [the documentation](https://global-workflow.readthedocs.io/en/latest/user_guide/clone.html#build-components) for more options. This may take a while.
+
+```bash
+cd global-workflow/sorc/
+./build_all.sh gfs gdas
+./link_workflow.sh
+```
+
+## Experiment Generation
+
+We are now ready to generate the experiment. First, you'll want to source the global workflow setup script, and then return to the `ufs-rtofs-howto` directory:
 ```bash
 source /path/to/global-workflow/dev/ush/gw_setup.sh
+cd /path/to/ufs-rtofs-howto
 ```
 
 Next, you'll need to configure your user settings for experiment generation. This can be done via editing the `sourceme.sh` and sourcing it or via setting directly (shown here for Ursa):
@@ -55,6 +96,8 @@ Note that these variables will need to be assigned before any call to `create_ex
 ```
 /path/to/global-workflow/dev/workflow/create_experiment.py -y coupled.exp.yaml
 ```
+
+## Run the Experiment
 
 Once the experiment is successfully created, start rocoto:
 ```bash
