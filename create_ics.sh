@@ -85,6 +85,17 @@ link_within_overlay() {
     echo "Linked (overlay): $2 -> $1"
 }
 
+# Remove every mediator restart the base mirror linked into the overlay, so the UFS
+# driver finds no usable mediator restart and cold starts. The source mediator is
+# re-staged (disabled, under the base's name) just below.
+drop_mirrored_med_restarts() {
+    local link
+    while IFS= read -r -d '' link; do
+        rm -f "$link"
+        echo "Dropped mirrored mediator restart: ${link#"${OVERLAY_DIR}/"}"
+    done < <(find "$OVERLAY_DIR" -path '*/model/med/restart/*.ufs.cpld.cpl.r.nc' -print0)
+}
+
 echo "Starting IC overlay construction..."
 echo "Source (correct restarts): $SOURCE_DIR"
 echo "Base   (structure + atm) : $BASE_DIR"
@@ -108,7 +119,14 @@ link_within_overlay "$CICE_RESTART_OVERLAY" "gdas.20260126/18/analysis/ice/20260
 link_within_overlay "$CICE_RESTART_OVERLAY" "gdas.20260127/00/analysis/ice/20260126.210000.analysis.cice_model.res.nc"
 
 # --- C. Mediator file ---
-replace_link "RESTART/datm.gfs.cpl.r.2025-12-25-00000.nc" "gdas.20260126/18/model/med/restart/20260126.210000.ufs.cpld.cpl.r.nc"
+# Neither source holds a usable mediator restart (the DATM one lacks coupling
+# fields, the CATM one is too coarse), so the mediator must cold start. Drop the
+# mediator restarts the base carried, then link the source (DATM) mediator under
+# the 18Z cycle's name -- same name as in the base, up to a .exclude suffix that
+# keeps the driver from picking it up while leaving the intended file identifiable.
+drop_mirrored_med_restarts
+replace_link "RESTART/datm.gfs.cpl.r.2025-12-25-00000.nc" \
+    "gdas.20260126/18/model/med/restart/20260126.210000.ufs.cpld.cpl.r.nc.exclude"
 
 # --- D. MOM6 Ocean Files ---
 # Base MOM file

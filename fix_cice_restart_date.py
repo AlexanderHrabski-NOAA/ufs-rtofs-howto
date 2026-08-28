@@ -24,7 +24,7 @@ try:
     from netCDF4 import Dataset
 except ImportError as exc:  # pragma: no cover
     sys.exit(f"error: needs numpy and netCDF4 ({exc}).\n"
-             "       In a global-workflow shell: source dev/ush/gw_setup.sh")
+             "       In a global-workflow shell: source global-workflow/dev/ush/load_modules.sh")
 
 # Attributes CICE writes, in the order it writes them.
 CANON = ("istep1", "myear", "mmonth", "mday", "msec")
