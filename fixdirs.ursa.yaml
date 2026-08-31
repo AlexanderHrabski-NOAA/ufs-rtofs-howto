@@ -33,13 +33,18 @@ bases:
 overlays:
   - name: OROG directory
     type: tree
-    src: .  
+    src: OROG
     dst: FIXorog
 
-  - name: CPL grid_spec.nc
+  - name: CPL directory
+    type: tree
+    src: CPL
+    dst: FIXcpl
+
+  - name: hgrid rename
     type: file
-    src: C384/C384_mosaic.nc
-    dst: FIXcpl/aC384o008/grid_spec.nc
+    src: MOM/regional.mom6.nc
+    dst: FIXmom/008/regional.mom6.nc
 
   - name: MOM zgrid interpolant
     type: file
