@@ -9,11 +9,27 @@ git clone https://github.com/AlexanderHrabski-NOAA/ufs-rtofs-howto.git
 cd ufs-rtofs-howto
 ```
 
-Note the two global workflow configuration files `coupled.exp.yaml` and `marine3dvar.yaml` which will edited as part of this setup. In the next subsection, we'll cover how to set up the fix files. 
+Note the two global workflow configuration files `coupled.exp.yaml` and `marine3dvar.yaml` which will edited as part of this setup. In the next subsection, we'll cover how to install the global workflow. 
+
+### Global Workflow Setup
+
+The global workflow is configured via the two files `coupled.exp.yaml` and `marine3dvar.yaml`, and the former reference the latter. You'll need to edit the `coupled.exp.yaml` configuration so that `yaml: /path/to/marine3dvar.yaml`. Once this has been done, clone the following branch of Alex's fork of the global workflow _in a space large enough to store the GFS/GDAS executables_:
+
+```bash
+git clone https://github.com/AlexanderHrabski-NOAA/global-workflow.git -b feature/highres_mom6cic6 --recurse-submodules -j 4
+```
+
+You'll need to build and install the global workflow before it can be used. See `./build_all.sh -h` or [the documentation](https://global-workflow.readthedocs.io/en/latest/user_guide/clone.html#build-components) for more options. This may take a while.
+
+```bash
+cd global-workflow/sorc/
+./build_all.sh gfs gdas
+./link_workflow.sh
+```
 
 ### Fix file setup
 
-Due to the increase in resolution and the difference in MOM6 configuration, this workflow needs fix files that are not present in the standard system fix file paths. `./create_fixdirs.py` is a utility that stages these additional files from a known location into a mirror of the relevant system fix file directories. We will call the mirror with the additional files an "overlay". The `fixdirs.<machine>.yaml` files are configuration files that contain the instructions for generting these overlays on each supported machine. Note that this script only links to existing high resolution fix files. It does not generate new fix files. In order to add support for a new machine, see the instructions in ...
+Due to the increase in resolution and the difference in MOM6 configuration, this workflow needs fix files that are not present in the standard system fix file paths. `./create_fixdirs.py` is a utility that stages these additional files from a known location into a mirror of the relevant system fix file directories. We will call the mirror with the additional files an "overlay". The `fixdirs.<machine>.yaml` files are configuration files that contain the instructions for generting these overlays on each supported machine. Note that this script only links to existing high resolution fix files. It does not generate new fix files.
 
 Run the overlay generator via `./create_fixdirs.py fixdirs.<machine>.yaml <dest>`. I choose to put these directories alongside my experiment configuration with the below command. 
 
@@ -50,33 +66,19 @@ On GAEA C6:
 On Ursa:
 ...
 
+Note that these two sources correspond to different dates. Checks exist within UFS to abort if the needed files have embedded dates that differ from the running cycle. MOM6 has an override that I am currently using to turn these checks off. CICE does not have such an override, so it is necissary to modify the embedded date in the CICE restart file (actually, analysis, see below).
+
 The ICs must also include analysis files. For now, we take the increment to be zero, and we construct a zero increment file for MOM6 to read. For CICE, the increment is already applied to the restart, so we simply link the analysis file to the restart file to achieve a zero increment.
 
 Finally, the mediator also has a warm start option, in which it reads a mediator restart file. In this case, neither source of restarts contains a suitable file. The DATM mediator restart is missing coupling fields, and the CATM restart is at to coarse a resolution. As a temporary workaround, we cold start the mediator, which is done automatically if a mediator restart isn't found in the ICs.
 
-The `create_icss.py` script constructs the ICs directly from these two sources according to the above description. It can be called via:
+The `create_ics.py` script constructs the ICs directly from these two sources according to the above description. It can be called via:
 
 ```bash
 source /path/to/global-workflow/dev/ush/load_modules.sh
-./create_ics.py /path/to/IC/rtofs.20251225 /path/to/IC/cp4.03-parallel-3dvar /path/to/IC/coupled-8km-ics 
+./create_ics.sh /path/to/IC/rtofs.20251225 /path/to/IC/cp4.03-parallel-3dvar /path/to/IC/coupled-8km-ics 
 ```
 Once this is generated, edit the `coupled.exp.yaml` configuration so that `icdir: /path/to/IC/coupled-8km-ics` points to your prepared initial conditions.
-
-### Global Workflow Setup
-
-The global workflow is configured via the two files `coupled.exp.yaml` and `marine3dvar.yaml`. In addition to the changes we've already made, you'll need to edit the `coupled.exp.yaml` configuration so that `yaml: marine3dvar.yaml`. Once this has been done, clone the following branch of Alex's fork of the global workflow _in a space large enough to store the GFS/GDAS executables_:
-
-```bash
-git clone https://github.com/AlexanderHrabski-NOAA/global-workflow.git -b feature/highres_mom6cic6 --recurse-submodules -j 4
-```
-
-You'll need to build and install the global workflow before it can be used. See `./build_all.sh -h` or [the documentation](https://global-workflow.readthedocs.io/en/latest/user_guide/clone.html#build-components) for more options. This may take a while.
-
-```bash
-cd global-workflow/sorc/
-./build_all.sh gfs gdas
-./link_workflow.sh
-```
 
 ## Experiment Generation
 
@@ -107,7 +109,7 @@ You can use the rocoto `GUI` to cycle the experiment:
 ```bash
 /path/to/global-workflow/dev/workflow/rocoto_viewer.py -d $RUNDIR/ufs-rtofs/EXPDIR/$pslot/$pslot.db -w $RUNDIR/ufs-rtofs/EXPDIR/$pslot/$pslot.xml
 ```
-It is also advisable to add the contests of `$RUNDIR/ufs-rtofs/EXPDIR/$pslot/$pslot.crontab` to your crontab via:
+It is also advisable to add the contents of `$RUNDIR/ufs-rtofs/EXPDIR/$pslot/$pslot.crontab` to your crontab via:
 ```bash
 crontab -e
 ```
