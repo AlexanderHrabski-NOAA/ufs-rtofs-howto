@@ -13,10 +13,10 @@ base:
   DO_VERFOZN: "YES"
   DO_VERFRAD: "YES"
   FHMAX_GFS: 240
-  FIXorog: /gpfs/f6/sfs-cpu/world-shared/Alexander.Hrabski/experiment_setup/FIXorog
-  FIXcpl: /gpfs/f6/sfs-cpu/world-shared/Alexander.Hrabski/experiment_setup/FIXcpl
-  FIXmom: /gpfs/f6/sfs-cpu/world-shared/Alexander.Hrabski/experiment_setup/FIXmom
-  FIXcice: /gpfs/f6/sfs-cpu/world-shared/Alexander.Hrabski/experiment_setup/FIXcice
+  FIXorog: /scratch4/NCEPDEV/marine/Alexander.Hrabski/experiment_setup/FIXorog
+  FIXcpl: /scratch4/NCEPDEV/marine/Alexander.Hrabski/experiment_setup/FIXcpl
+  FIXmom: /scratch4/NCEPDEV/marine/Alexander.Hrabski/experiment_setup/FIXmom 
+  FIXcice: /scratch4/NCEPDEV/marine/Alexander.Hrabski/experiment_setup/FIXcice
 
 prepoceanobs:
   use_exp_obs: "YES"
