@@ -64,7 +64,8 @@ On GAEA C6:
 - DATM: `/gpfs/f6/sfs.cpu/world-shared/Alexander.Hrabski/IC/rtofs.20251225`
 
 On Ursa:
-...
+- CATM: `/scratch4/NCEPDEV/marine/Alexander.Hrabski/IC/cp4.03-parallel-3dvar`
+- DATM: `/scratch4/NCEPDEV/marine/Alexander.Hrabski/IC/rtofs.20251225`
 
 Note that these two sources correspond to different dates. Checks exist within UFS to abort if the needed files have embedded dates that differ from the running cycle. MOM6 has an override that I am currently using to turn these checks off. CICE does not have such an override, so it is necissary to modify the embedded date in the CICE restart file (actually, analysis, see below).
 
