@@ -23,7 +23,7 @@ You'll need to build and install the global workflow before it can be used. See 
 
 ```bash
 cd global-workflow/sorc/
-./build_all.sh gfs gdas
+./build_all.sh gfs gdas gsi
 ./link_workflow.sh
 ```
 
