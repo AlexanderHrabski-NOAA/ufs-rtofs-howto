@@ -1,3 +1,10 @@
+{# Location of the high-res MOM6/CICE6 fix files on each machine #}
+{% if MACHINE == 'URSA' %}
+  {% set fix_hr = '/scratch4/NCEPDEV/marine/Alexander.Hrabski/FIX_highres_mom6_cic6' %}
+{% elif MACHINE == 'GAEAC6' %}
+  {% set fix_hr = '/gpfs/f6/sfs-cpu/world-shared/Alexander.Hrabski/FIX_highres_mom6_cic6' %}
+{% endif %}
+
 defaults:
   !INC {{ HOMEglobal }}/dev/parm/config/gfs/yaml/defaults.yaml
 
@@ -13,21 +20,44 @@ base:
   DO_VERFOZN: "YES"
   DO_VERFRAD: "YES"
   FHMAX_GFS: 240
-  FIXorog: /scratch4/NCEPDEV/marine/Alexander.Hrabski/experiment_setup/FIXorog
-  FIXcpl: /scratch4/NCEPDEV/marine/Alexander.Hrabski/experiment_setup/FIXcpl
-  FIXmom: /scratch4/NCEPDEV/marine/Alexander.Hrabski/experiment_setup/FIXmom 
-  FIXcice: /scratch4/NCEPDEV/marine/Alexander.Hrabski/experiment_setup/FIXcice
+
+fix_files:
+  replace:                                  # already in the fix tree; regenerated C384 grid
+    orog/C384:
+      - {{ fix_hr }}/OROG/C384/C384_grid.tile*.nc
+      - {{ fix_hr }}/OROG/C384/C384_mosaic.nc
+  add:                                      # not in the fix tree yet
+    orog/C384:
+      - {{ fix_hr }}/OROG/C384/C384.mx008_oro_data.tile*.nc
+      - {{ fix_hr }}/OROG/C384/C384_oro_data_?s.tile*.nc
+      - {{ fix_hr }}/OROG/C384/readme.C384.mx008.txt
+    orog/C384/sfc:                    {{ fix_hr }}/OROG/C384/sfc/*
+    orog/C384/ocean_mask/008:         {{ fix_hr }}/OROG/C384/ocean_mask/008
+    cpl/aC384o008:                    {{ fix_hr }}/CPL/aC384o008
+    mom6/008/regional.mom6.nc:        {{ fix_hr }}/MOM/regional.mom6.nc
+    mom6/008/interpolate_zgrid_30L.nc: {{ fix_hr }}/MOM/interpolate_zgrid_30L.nc
+    mom6/008/oceanda_zgrid_41L.nc:    {{ fix_hr }}/MOM/oceanda_zgrid_41L.nc
+    gdas/soca:
+      - {{ fix_hr }}/GDAS/soca/4500x3297x41
+      - {{ fix_hr }}/GDAS/soca/720x540x41
+
+ocn:
+  MOM6_INPUT_TEMPLATE: {{ HOMEglobal }}/../experiment_setup/MOM6/MOM_input_008.IN
+  MOM6_DATA_TABLE_TEMPLATE: {{ HOMEglobal }}/../experiment_setup/MOM6/MOM6_data_table.IN
+
+ice:
+  CICE_TEMPLATE: {{ HOMEglobal }}/../experiment_setup/CICE6/ice_in.IN
 
 prepoceanobs:
   use_exp_obs: "YES"
   dmpdir_exp: /scratch3/NCEPDEV/da/common_obsForge
 
 marinebmat:
-  SOCA_INPUT_FIX_DIR: {{ HOMEglobal }}/fix/gdas/soca/1440x1080x75/soca
-  SOCA_ANL_GEOM: {{ HOMEglobal }}/fix/gdas/soca/720x540x75/soca
+  SOCA_INPUT_FIX_DIR: "${FIXglobal}/gdas/soca/4500x3297x41/soca"
+  SOCA_ANL_GEOM: "${FIXglobal}/gdas/soca/720x540x41/soca"
 
 marineanl:
-  SOCA_INPUT_FIX_DIR: {{ HOMEglobal }}/fix/gdas/soca/1440x1080x75/soca
-  SOCA_ANL_GEOM: {{ HOMEglobal }}/fix/gdas/soca/720x540x75/soca
+  SOCA_INPUT_FIX_DIR: "${FIXglobal}/gdas/soca/4500x3297x41/soca"
+  SOCA_ANL_GEOM: "${FIXglobal}/gdas/soca/720x540x41/soca"
   SOCA_OBS_LIST: {{ HOMEglobal }}/parm/gdas/marine/obs/obs_list_gfsv17.yaml.j2
   SOCA_NINNER: 100
