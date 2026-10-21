@@ -147,8 +147,10 @@ def parse_args(argv=None):
             sp.add_argument("--ocnres-input", default="025",
                             help="ocean mask of the restarts (default: 025)")
 
-    r = sub.add_parser("report", help="print what apply would do; writes nothing")
+    r = sub.add_parser("report", help="print what apply would do; writes no restarts")
     common(r)
+    r.add_argument("--cells-csv", metavar="PATH",
+                   help="also write one row per cell that gains land or water, for plotting")
     a = sub.add_parser("apply", help="fix the surface restarts in place")
     common(a)
     a.add_argument("--max-distance-km", type=float, required=True,
@@ -383,6 +385,10 @@ class Plan:
         old, new = ctx.old.land_frac.ravel(), ctx.new.land_frac.ravel()
         self.gains_land = np.flatnonzero((old <= 0.0) & (new > 0.0))
         self.gains_water = np.flatnonzero((old >= 1.0) & (new < 1.0))
+        # Part land -> no land: nothing to copy, but slmsk must drop to 0 or 2.
+        self.loses_land = np.flatnonzero((old > 0.0) & (old < 1.0) & (new <= 0.0))
+        # Every cell whose land fraction moved needs its composites and slmsk redone.
+        self.refresh = np.flatnonzero(old != new)
 
         vtype, stype = np.rint(field_2d(dss, "vtype")), np.rint(field_2d(dss, "stype"))
 
@@ -406,12 +412,14 @@ class Plan:
             tkey = (cv * 100 + cs).astype(np.int64)
             self.land_class = tkey
             self.land_src, self.land_dist = find_donors(ctx.xyz, self.gains_land, tkey, pool, key)
-            # Untyped distance, for the report only.
+            # Looser matches, for the report only.
+            self.land_soil_dist = find_donors(ctx.xyz, self.gains_land, cs.astype(np.int64), pool,
+                                              stype.astype(np.int64))[1]
             self.land_any_dist = nearest(ctx.xyz, self.gains_land, np.flatnonzero(pool))[1]
         else:
             self.land_class = np.empty(0, dtype=np.int64)
             self.land_src = np.empty(0, dtype=np.intp)
-            self.land_dist = self.land_any_dist = np.empty(0)
+            self.land_dist = self.land_soil_dist = self.land_any_dist = np.empty(0)
 
         # Water: lake from lake, ocean from ocean, when the orography distinguishes them.
         pool = old < 1.0
@@ -505,6 +513,7 @@ def histogram(dist):
 
 def report(args):
     ctx = Context(args)
+    rows = []
     for directory, prefix, when in find_restart_sets(args.ic_dir):
         rel = os.path.relpath(os.path.join(directory, prefix), args.ic_dir)
         dss = open_set(tile_paths(directory, prefix))
@@ -528,25 +537,58 @@ def report(args):
                 f"{int(found[k].sum())} {PROBLEM_TEXT[k]}" for k in found))
         per_tile = lambda cells: " ".join(
             str(int((cells // (ctx.shape[1] * ctx.shape[2]) == t).sum())) for t in range(NTILES))
+        others = plan.refresh.size - plan.gains_land.size - plan.gains_water.size - plan.loses_land.size
         print(f"   cells that gain land : {plan.gains_land.size:6d}   per tile: {per_tile(plan.gains_land)}")
         print(f"   cells that gain water: {plan.gains_water.size:6d}   per tile: {per_tile(plan.gains_water)}")
+        print(f"   cells that lose all land (part land -> 0): {plan.loses_land.size}; "
+              f"other land_frac changes: {others}")
         if plan.gains_land.size:
             h, worst = histogram(plan.land_dist)
             print(f"   land donor, same vegetation and soil type: {h}; farthest {worst}")
+            h, worst = histogram(plan.land_soil_dist)
+            print(f"   land donor, same soil type only          : {h}; farthest {worst}")
             h, worst = histogram(plan.land_any_dist)
-            print(f"   land donor, any type (for comparison)    : {h}; farthest {worst}")
+            print(f"   land donor, any type                     : {h}; farthest {worst}")
             classes, counts = np.unique(plan.land_class, return_counts=True)
-            print(f"   {classes.size} vegetation/soil classes among new land: " + ", ".join(
-                f"veg {c // 100} soil {c % 100}: {n}" for c, n in zip(classes, counts)))
-            for g, d in zip(plan.gains_land[~np.isfinite(plan.land_dist)][:5],
-                            plan.land_dist[~np.isfinite(plan.land_dist)][:5]):
-                c = plan.land_class[plan.gains_land == g][0]
-                print(f"     no donor with veg {c // 100} soil {c % 100}: {ctx.where(g)}")
+            print(f"   {classes.size} vegetation/soil classes among new land (largest first): " + ", ".join(
+                f"veg {c // 100} soil {c % 100}: {n}"
+                for c, n in sorted(zip(classes, counts), key=lambda x: -x[1])[:15]) + ", ...")
+            print("   farthest new-land cells (typed / soil only / any type):")
+            order = np.argsort(-np.where(np.isfinite(plan.land_dist), plan.land_dist, 1e9))[:10]
+            for k in order:
+                c = plan.land_class[k]
+                dists = " / ".join("none" if not np.isfinite(d) else f"{d:.0f}"
+                                   for d in (plan.land_dist[k], plan.land_soil_dist[k], plan.land_any_dist[k]))
+                print(f"     {ctx.where(plan.gains_land[k])}  veg {c // 100} soil {c % 100}: {dists} km")
         if plan.gains_water.size:
             h, worst = histogram(plan.water_dist)
             lakes = int(plan.water_class.sum())
             print(f"   water donor ({lakes} lake cells): {h}; farthest {worst}")
+        if args.cells_csv:
+            rows += cell_rows(rel, ctx, plan)
+    if args.cells_csv:
+        with open(args.cells_csv, "w") as f:
+            f.write("restart,gains,tile,i,j,lat,lon,veg,soil,km_typed,km_soil_only,km_any\n")
+            f.writelines(rows)
+        print(f"wrote {len(rows)} rows to {args.cells_csv}")
     return 0
+
+
+def cell_rows(rel, ctx, plan):
+    """CSV rows, one per cell that gains land or water."""
+    lat, lon = ctx.lat.ravel(), ctx.lon.ravel() % 360.0
+    fmt = lambda d: "" if not np.isfinite(d) else f"{d:.1f}"
+    out = []
+    for k, g in enumerate(plan.gains_land):
+        t, j, i = np.unravel_index(g, ctx.shape)
+        c = plan.land_class[k]
+        out.append(f"{rel},land,{t + 1},{i + 1},{j + 1},{lat[g]:.4f},{lon[g]:.4f},{c // 100},{c % 100},"
+                   f"{fmt(plan.land_dist[k])},{fmt(plan.land_soil_dist[k])},{fmt(plan.land_any_dist[k])}\n")
+    for k, g in enumerate(plan.gains_water):
+        t, j, i = np.unravel_index(g, ctx.shape)
+        d = fmt(plan.water_dist[k])
+        out.append(f"{rel},water,{t + 1},{i + 1},{j + 1},{lat[g]:.4f},{lon[g]:.4f},,,{d},{d},{d}\n")
+    return out
 
 
 # --------------------------------------------------------------------------- apply
@@ -595,12 +637,13 @@ def apply_set(directory, prefix, when, ctx, max_km):
                  for kind, g, d in far[:10]]
         raise FixError(f"{len(far)} cells have no donor within {max_km:g} km:\n  " + "\n  ".join(lines))
 
-    changed = np.union1d(plan.gains_land, plan.gains_water)
-    print(f"   {plan.gains_land.size} cells gain land, {plan.gains_water.size} gain water")
-    if changed.size == 0:
+    refresh = plan.refresh
+    print(f"   {plan.gains_land.size} cells gain land, {plan.gains_water.size} gain water, "
+          f"{plan.loses_land.size} lose all land; {refresh.size} land fractions change")
+    if refresh.size == 0:
         return False
     n_cell = ctx.shape[1] * ctx.shape[2]
-    touched = sorted(set((changed // n_cell).tolist()))
+    touched = sorted(set((refresh // n_cell).tolist()))
 
     tmps = [p + ".sfcfix.tmp" for p in paths]
     try:
@@ -632,16 +675,16 @@ def apply_set(directory, prefix, when, ctx, max_km):
             else:
                 n_lapse = 0
 
-            comp_done = recompute_composites(dss, ctx, changed, touched)
+            comp_done = recompute_composites(dss, ctx, refresh, touched)
 
             slmsk = stack_var(dss, "slmsk")
-            lf = ctx.new.land_frac.ravel()[changed]
-            fice = field_2d(dss, "fice")[changed] if "fice" in dss[0].variables else np.zeros(changed.size)
-            slmsk[..., changed] = np.where(lf > 0.0, 1.0, np.where(fice > 0.0, 2.0, 0.0))
+            lf = ctx.new.land_frac.ravel()[refresh]
+            fice = field_2d(dss, "fice")[refresh] if "fice" in dss[0].variables else np.zeros(refresh.size)
+            slmsk[..., refresh] = np.where(lf > 0.0, 1.0, np.where(fice > 0.0, 2.0, 0.0))
             write_back(dss, "slmsk", slmsk, ctx.shape, touched)
 
             found = mask_problems(field_2d(dss, "slmsk"), field_2d(dss, "stype"), ctx.new.land_frac.ravel())
-            at_changed = {k: int(v[changed].sum()) for k, v in found.items()}
+            at_changed = {k: int(v[refresh].sum()) for k, v in found.items()}
             elsewhere = {k: int(v.sum()) - at_changed[k] for k, v in found.items()}
             if found["abort"].any() or any(at_changed.values()):
                 raise FixError("the result still disagrees with the target mask: " + ", ".join(

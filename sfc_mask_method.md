@@ -50,7 +50,7 @@ For each cell that gains land:
 
 For each cell that gains water, copy every water and sea-ice field from the nearest cell that had water in the CATM run (25 km `land_frac < 1`). If the orography files carry `lake_frac`, lakes take lake donors and ocean takes ocean donors.
 
-Then, at every changed cell, recompute the composites with the model's fractional-grid formulas (UFSATM `io/fv3atm_sfc_io.F90`) and set `slmsk`. Cells that gain nothing, and the side a cell already had, stay bit-for-bit identical.
+Then, at every cell whose land fraction changed, recompute the composites with the model's fractional-grid formulas (UFSATM `io/fv3atm_sfc_io.F90`) and set `slmsk`. This includes cells that go from part land to no land. They gain nothing, but their `slmsk` of 1 would still make `global_cycle` abort. Apart from that, cells that gain nothing, and the side a cell already had, stay bit-for-bit identical.
 
 ### Why copy from one donor, instead of interpolating
 
@@ -95,7 +95,7 @@ source /path/to/global-workflow/dev/ush/load_modules.sh
 ./fix_sfc_masks.py check <ic dir> <8 km orog/C384 dir>
 ```
 
-The report also prints the untyped donor distance next to the type-matched one, so you can see what the type matching costs in distance. Pick `--max-distance-km` from it.
+The report also prints the donor distance when matching soil type only, and when matching nothing, so you can see what type matching costs. It lists the farthest new-land cells, and `--cells-csv cells.csv` writes one row per changed cell, with position and the three distances, for plotting. Pick `--max-distance-km` from it.
 
 ## Limitations
 
