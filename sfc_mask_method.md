@@ -61,16 +61,48 @@ Then, at every cell whose land fraction changed, recompute the composites with t
 
 GFDL's FRE-NCtools `remap_land` uses the same rule for its land restarts: the nearest same-kind point by great-circle distance, whole column copied. It only reads LM3/LM4 files, so it can't be used here.
 
-### Why not chgres_cube
+### Why not chgres_cube on the surface only
 
-`chgres_cube` (convert_sfc only, mx025 to mx008) also fixes the mask, and an earlier version of this step used it. It isn't a good fit:
+`chgres_cube` (convert_sfc only, mx025 to mx008) also fixes the mask, and an earlier version of this step used it. It isn't a good fit for patching a warm restart:
 
 - **Cold-start output.** It writes a cold-start file with no Noah-MP state, so its output can't replace `sfc_data`. It has to be merged into the warm restart, and the Noah-MP fields then come from somewhere else.
 - **Several donors per cell.** It picks donors separately for each group of fields. ESMF nearest neighbour supplies soil and canopy, while a ring search in index space on one tile supplies SST, NSST, ice fraction and snow. One new-land cell can get its soil from one neighbour and its snow from another.
 - **Not fractional-grid aware.** It reads only the combined fields (`tsea`, `zorl`, `sheleg`, `snwdph`). It also takes donors from `slmsk`, so a part-land cell can donate only land.
 - **Heavy to run.** It needs MPI, a Slurm allocation and a namelist.
 
-`chgres_cube` is the right tool for cold starts and for changing grids, neither of which applies here.
+`chgres_cube` is the right tool for cold starts and for changing grids. Converting the whole atmosphere and cold starting it is a real alternative to this method, compared in the next section.
+
+## Compared with a cold start of the atmosphere
+
+The alternative is to stop patching the warm restarts altogether. `chgres_cube` converts the whole CATM atmosphere (atmosphere, surface and NSST) onto the 8 km run's orography, and the experiment is set up as a cold start (`start: cold` in `coupled.exp.yaml`). The ocean and ice still start from their restarts. This is a separate recipe, drafted on this repository's `main` branch.
+
+global-workflow already supports pairing a cold atmosphere with warm ocean and ice. Every coupled cold start runs this way (the GFSv17 prototypes, GEFS, SFS), because the start type only changes how FV3 starts:
+
+- **Staging.** With `EXP_WARM_START=.false.`, FV3 gets `gfs_ctrl.nc`, `gfs_data.tile*.nc` and `sfc_data.tile*.nc` from `model/atmos/input`. The ocean and ice restarts are staged either way, and the mediator restart only for a warm start (`parm/stage/master_gfs.yaml.j2`).
+- **FV3** starts from those files (`external_ic`, `nggps_ic`, `na_init = 1`, `mountain = .false.`).
+- **MOM6** reads `MOM.res*.nc` as before. How it reads them is set by resolution (`MOM6_RESTART_SETTING = 'r'` at 008 in `config.ufs`), not by the start type.
+- **CICE** reads the same `cice_model.res.nc`, with `runtype = 'initial'` and `use_restart_time = .false.`, so its embedded date no longer matters.
+- **The mediator** starts up from nothing, as it already does here.
+- **The first cycle** has no IAU. The model starts at the cycle time (00Z), not at 21Z, so the ocean and ice files are named for 00Z. The CATM run has atmosphere restarts at 00Z, so nothing needs relabelling.
+
+"Cold start" is a misleading name for this. In FV3 it means starting from converted initial-condition files without the physics restart, not from an atmosphere that hasn't been spun up: the state is still the CATM run's, converted and simplified.
+
+| | This method (warm start, patched) | Cold start of the atmosphere |
+|---|---|---|
+| What changes | Only cells whose land fraction changes (28,812 of 884,736). Everything else is bit-for-bit identical. | Every cell is rewritten by `chgres_cube`. On the same C384 grid, most fields come back almost unchanged. |
+| Mask consistency | Patched, then confirmed by `check` | By construction: `chgres_cube` builds `sfc_data` on the 8 km mask |
+| New land | One donor column with the same vegetation and soil types, Noah-MP included. An error if there's no donor within the limit. | Soil and canopy from the ESMF nearest neighbour; snow, SST and ice from a ring search on the same tile; built-in defaults where nothing is found. Soil moisture is rescaled to the soil type. It never fails. |
+| Remote islands (364 cells more than 250 km from any 25 km land) | An error, for now (see Status) | Filled without a warning |
+| Atmosphere dynamics | The restart state | Remapped from L128 to L128 (almost an identity), then one initialization step and a short adjustment |
+| Physics restart (`phy_data`: convection, PBL TKE, cloud fraction, radiation) | Kept | Dropped everywhere, so these spin up over the first hours |
+| Noah-MP | Kept everywhere except at new-land cells | Rebuilt everywhere by the model's cold-start rules. Soil temperature and moisture, SWE and canopy water carry over. The aquifer (`zwt = 2.5 m`, `waxy = 4900 mm`), snow layers, canopy temperatures and vegetation pools are reset. |
+| NSST | Kept | Converted (`convert_nst`), so no NSST spin-up |
+| First cycle | IAU window from 21Z | No IAU; starts at 00Z |
+| Ocean, ice, mediator | MOM6 restart; CICE `continue`; mediator starts up | The same, except that CICE runs as `initial` |
+| Second cycle onward | Warm start from the model's own restarts | The same |
+| Tooling | This script, on a login node | `chgres_cube` under MPI in a batch job: the UFS_UTILS-supported path |
+
+The cold start's cost is concentrated in the first half-cycle, whose forecast is the background for the first analysis, and in the slow land states (aquifer, snow layers), which take longer to re-equilibrate. That matters if the early cycles are used for comparisons. This method disturbs much less, but it is custom code, and it still needs a policy for the remote islands.
 
 ## Safeguards
 
@@ -97,9 +129,56 @@ source /path/to/global-workflow/dev/ush/load_modules.sh
 
 The report also prints the donor distance when matching soil type only, and when matching nothing, so you can see what type matching costs. It lists the farthest new-land cells, and `--cells-csv cells.csv` writes one row per changed cell, with position and the three distances, for plotting. Pick `--max-distance-km` from it.
 
+The first orography directory must be the one the CATM run used (the system `orog/C384`), and the second the 8 km one. Passing the 8 km directory twice makes the identical-grid check compare a grid with itself.
+
+## Status
+
+As of 2026-10-21.
+
+**Implemented.** `fix_sfc_masks.py` with its `report`, `apply` and `check` modes, this note, and section E of `create_ics.sh` (`SFC_MAX_DONOR_KM`, 250 km by default). Everything described above is in the code: the type-matched land donors, ocean and lake water donors, the climatology interpolated in time, the lapse-rate correction, the recomputed composites and `slmsk`, every safeguard, and the report's CSV output.
+
+**Tested.** A synthetic six-tile fixture checks donor choice (including ties), lake and ocean classes, the lapse-rate correction, composites, `slmsk`, refusal of unknown fields, and re-runs. Running `create_ics.sh` twice in a row gives identical ICs.
+
+**Report on the real restarts (Ursa).** `report` was run on the CATM directory. All six restart sets (2025-12-12 18Z and 2026-01-26 18Z, at 21Z, 00Z and 03Z) gave the same numbers:
+
+| Cells                                   | Count |
+|-----------------------------------------|-------|
+| Gain land                               | 4,850 |
+| Gain water                              | 2,029 |
+| Lose all their land                     | 2,041 |
+| Other land-fraction changes             | 19,892 |
+| Would make `global_cycle` abort         | 2,044 (0.23% of 884,736) |
+
+| New-land donor distance  | Median | 90th percentile | > 250 km | > 500 km | Farthest |
+|--------------------------|--------|-----------------|----------|----------|----------|
+| Same vegetation and soil | 48 km  | 736 km          | 973      | 636      | 8,353 km (1 cell has none) |
+| Same soil only           | 28 km  | 253 km          | 488      | 297      | 4,774 km |
+| Any land                 | 27 km  | 178 km          | 364      | 250      | 3,506 km |
+
+- The water side is fine: the farthest water donor is 124 km away, and no new-water cell is a lake.
+- 261 of the new-land cells are land ice (vegetation type 15).
+- Exact type matching is what drives the distances up. For example, one Labrador cell's typed donor is 8,353 km away, against 25 km for any land.
+- The one cell with no typed donor at all is on the Angola coast (vegetation 16, soil 10).
+- The 364 cells more than 250 km from any land are remote islands the finer ocean mask now resolves: French Polynesia, Micronesia, the Marshall Islands, the Maldives, the South Sandwich Islands (land ice), Crozet, Amsterdam, Macquarie and Tristan da Cunha.
+- The densest clusters of changed cells are the Aegean, the Bahamas, the Philippines, Indonesia and the Wadden Sea.
+
+**Fixed after the report.** Cells that go from part land to no land weren't getting their `slmsk` reset, so `apply` would have failed its own check. Composites and `slmsk` are now redone at every land-fraction change (commit b10b0c6).
+
+**Not done yet.**
+
+- `apply` has not been run on the real ICs, and no `sfcanl` job has run on fixed restarts.
+- The report runs so far passed the 8 km orography directory for both arguments, so they need repeating with the system `orog/C384` first, to really test that the grids are identical.
+
+**Open decisions.** With the defaults, `apply` would refuse these ICs: 973 cells have no typed donor within 250 km. The choices are:
+
+1. **Loosen the land rule.** Require only the same kind of land (ice or not ice), then adjust the copied column to the cell's 8 km types. Soil moisture would be rescaled as `chgres_cube` does, and the Noah-MP vegetation pools rebuilt with the model's cold-start rules from `noahmptable.tbl`.
+2. **Copy from the nearest land of any type, then apply the model's cold-start rules at the new-land cells only.** This is the same as what `chgres_cube` plus a model cold start would give at those cells, while the rest of the restart stays warm.
+3. **Give remote islands a local column, with a warning.** Under either rule, a cell beyond the limit would get a column built from its own `tsea` and climatology instead of an error.
+4. **Drop the patch and cold start the atmosphere** (see the previous section).
+
 ## Limitations
 
-- Type matching is exact. A rare vegetation and soil combination can push the donor far away, or leave no donor at all. If the report shows that happening often, the next step is a fallback, for example matching soil type only and rescaling soil moisture as `chgres_cube` does.
+- Type matching is exact. A rare vegetation and soil combination can push the donor far away, or leave no donor at all. The real report shows that this happens often (see Status).
 - Only soil temperature gets the lapse-rate correction, as in `chgres_cube`. The other land temperatures (skin, vegetation, snow) are copied as they are.
 - The vegetation and soil types of cells that keep their land still come from the CATM run. `global_cycle` keeps restart vegetation and soil types (`FVETL = FSOTL = 99999`), but it does refresh albedo, vegetation fraction and the other climatological fields every cycle.
-- So far this has been tested only on a synthetic six-tile fixture, not on the real restarts.
+- `apply` has been tested only on a synthetic six-tile fixture so far. On the real restarts, only `report` has been run.
