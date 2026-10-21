@@ -73,12 +73,28 @@ The ICs must also include analysis files. For now, we take the increment to be z
 
 Finally, the mediator also has a warm start option, in which it reads a mediator restart file. In this case, neither source of restarts contains a suitable file. The DATM mediator restart is missing coupling fields, and the CATM restart is at to coarse a resolution. As a temporary workaround, we cold start the mediator, which is done automatically if a mediator restart isn't found in the ICs.
 
-The `create_ics.py` script constructs the ICs directly from these two sources according to the above description. It can be called via:
+The atmospheric surface restarts need one more fix. They come from the CATM run, so their land/sea mask follows the 25 km ocean (`C384.mx025_oro_data`), while this workflow uses the 8 km ocean (`C384.mx008_oro_data`). Along the coast, some cells gain land, or gain a water fraction, that the CATM run never computed a state for, and `global_cycle` aborts with `LAND FRAC AND SLMASK MISMATCH`. `fix_sfc_masks.py` fixes this by copying the missing side of each of these cells from a single nearby cell that had it in the CATM run. For new land, the donor must also have the same vegetation and soil type as the 8 km surface climatology, which then fills in the remaining climatological fields. Everything else in the restarts is left untouched. See `sfc_mask_method.md` for the details.
+
+The fix refuses to touch a cell with no donor within `SFC_MAX_DONOR_KM` (250 km by default), so it's worth checking the donor distances first. The report mode only reads files, so it can be run on the CATM directory directly:
 
 ```bash
 source /path/to/global-workflow/dev/ush/load_modules.sh
-./create_ics.sh /path/to/IC/rtofs.20251225 /path/to/IC/cp4.03-parallel-3dvar /path/to/IC/coupled-8km-ics 
+./fix_sfc_masks.py report /path/to/IC/cp4.03-parallel-3dvar \
+    /scratch3/NCEPDEV/global/role.glopara/fix/orog/20240917/C384 \
+    /scratch4/NCEPDEV/marine/Alexander.Hrabski/FIX_highres_mom6_cic6/OROG/C384
 ```
+
+The `create_ics.sh` script constructs the ICs directly from these two sources according to the above description. It can be called via (shown for Ursa):
+
+```bash
+source /path/to/global-workflow/dev/ush/load_modules.sh
+./create_ics.sh /path/to/IC/rtofs.20251225 /path/to/IC/cp4.03-parallel-3dvar /path/to/IC/coupled-8km-ics \
+    /scratch3/NCEPDEV/global/role.glopara/fix/orog/20240917/C384 \
+    /scratch4/NCEPDEV/marine/Alexander.Hrabski/FIX_highres_mom6_cic6/OROG/C384
+```
+
+On GAEA C6, the two orography directories are `/gpfs/f6/drsa-precip3/world-shared/role.glopara/fix/orog/20240917/C384` and `/gpfs/f6/sfs-cpu/world-shared/Alexander.Hrabski/FIX_highres_mom6_cic6/OROG/C384`. Re-running `create_ics.sh` is safe and gives the same ICs: each run re-links the base files into the overlay and redoes every step, including the surface fix. Afterwards, `./fix_sfc_masks.py check /path/to/IC/coupled-8km-ics <8 km orog dir>` confirms that no surface restart would make `global_cycle` abort.
+
 Once this is generated, edit the `coupled.exp.yaml` configuration so that `icdir: /path/to/IC/coupled-8km-ics` points to your prepared initial conditions.
 
 ## Experiment Generation

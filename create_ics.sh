@@ -4,19 +4,27 @@
 set -e
 
 # 1. Validate arguments
-if [ "$#" -ne 3 ]; then
-    echo "Usage: $0 <source_dir> <base_dir> <overlay_dir>"
+if [ "$#" -ne 5 ]; then
+    echo "Usage: $0 <source_dir> <base_dir> <overlay_dir> <orog_dir_base> <orog_dir_run>"
     echo "  <source_dir>:  RTOFS directory holding the correct restarts (e.g., /path/to/rtofs.20251225)."
     echo "  <base_dir>:    Directory providing the directory structure and atmospheric restarts"
     echo "                 (e.g., cp4.03-parallel-3dvar)."
     echo "  <overlay_dir>: New location. A mirror of <base_dir> is built here (directories recreated,"
     echo "                 files symlinked), then files from <source_dir> are overlaid on top of it."
+    echo "  <orog_dir_base>: orog/C384 directory matching the base run's 25 km ocean mask"
+    echo "                   (e.g. the system fix/orog/20240917/C384)."
+    echo "  <orog_dir_run>:  orog/C384 directory with the 8 km ocean mask and its sfc/ climatology"
+    echo "                   (e.g. FIX_highres_mom6_cic6/OROG/C384)."
+    echo "Optional: SFC_MAX_DONOR_KM (default 250) caps the donor distance in step E. Choose it"
+    echo "from './fix_sfc_masks.py report' (see sfc_mask_method.md)."
     exit 1
 fi
 
 SOURCE_DIR="$1"
 BASE_DIR="$2"
 OVERLAY_DIR="$3"
+OROG_DIR_BASE="$4"
+OROG_DIR_RUN="$5"
 
 # 2. Verify the input directories exist
 if [ ! -d "$SOURCE_DIR" ] || [ ! -d "$BASE_DIR" ]; then
@@ -149,6 +157,18 @@ rm -f "${OVERLAY_DIR}/gdas.20260126/18/analysis/ocean/gdas.t18z.mom6_increment.i
 rm -f "${OVERLAY_DIR}/gdas.20260127/00/analysis/ocean/gdas.t00z.mom6_increment.i006.nc"
 ./generate_zero_inc.py "${OVERLAY_DIR}/gdas.20260126/18/analysis/ocean/" "18"
 ./generate_zero_inc.py "${OVERLAY_DIR}/gdas.20260127/00/analysis/ocean" "00"
+
+echo "----------------------------------------"
+
+# --- E. Atmosphere surface restarts ---
+# The surface restarts come from the base run, so their land/sea mask follows the
+# 25 km ocean (mx025) while this run uses the 8 km mask (mx008); global_cycle aborts
+# on the mismatch. Cells that gain land or water copy that side from one matching
+# neighbour (see sfc_mask_method.md). The mirrored links are replaced by real
+# files; the base run is not modified.
+echo "Reconciling atmosphere surface restarts with the 8 km land/sea mask..."
+./fix_sfc_masks.py apply "$OVERLAY_DIR" "$OROG_DIR_BASE" "$OROG_DIR_RUN" \
+    --max-distance-km "${SFC_MAX_DONOR_KM:-250}"
 
 
 echo "Done!"
