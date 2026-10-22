@@ -1959,7 +1959,7 @@ RESTART_CONTROL = -1            ! default = 1
                                 ! for a time-stamped file, and odd (bit 0) for a non-time-stamped file.  A
                                 ! restart file will be saved at the end of the run segment for any non-negative
                                 ! value.
-OCEAN_SURFACE_STAGGER = "C"     ! default = "C"
+OCEAN_SURFACE_STAGGER = "A"     ! default = "C"
                                 ! A case-insensitive character string to indicate the staggering of the surface
                                 ! velocity field that is returned to the coupler.  Valid values include 'A',
                                 ! 'B', or 'C'.
@@ -2008,7 +2008,7 @@ APPROX_NET_MASS_SRC = False     !   [Boolean] default = False
                                 ! If true, use the net mass sources from the ice-ocean boundary type without any
                                 ! further adjustments to drive the ocean dynamics.  The actual net mass source
                                 ! may differ due to internal corrections.
-WIND_STAGGER = "C"              ! default = "C"
+WIND_STAGGER = "A"              ! default = "C"
                                 ! A case-insensitive character string to indicate the staggering of the input
                                 ! wind stress field.  Valid values are 'A', 'B', or 'C'.
 WIND_STRESS_MULTIPLIER = 1.0    !   [nondim] default = 1.0
