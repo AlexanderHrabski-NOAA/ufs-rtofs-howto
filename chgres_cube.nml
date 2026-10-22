@@ -1,0 +1,56 @@
+! chgres_cube namelist: converts the CATM (25 km ocean) warm restarts valid at
+! 2026-01-27 00Z into cold-start ICs on the 8 km ocean's orography. Copy it to
+! fort.41 in an empty run directory; see "IC setup" in readme.md.
+!
+! Paths are for Ursa. On GAEA C6, replace
+!   /scratch3/NCEPDEV/global/role.glopara/fix
+!       -> /gpfs/f6/drsa-precip3/world-shared/role.glopara/fix
+!   /scratch4/NCEPDEV/marine/Alexander.Hrabski
+!       -> /gpfs/f6/sfs-cpu/world-shared/Alexander.Hrabski
+ &config
+  ! Input: the CATM restarts, on the grid and orography the CATM run used
+  input_type="restart"
+  mosaic_file_input_grid="/scratch3/NCEPDEV/global/role.glopara/fix/orog/20240917/C384/C384_mosaic.nc"
+  orog_dir_input_grid="/scratch3/NCEPDEV/global/role.glopara/fix/orog/20240917/C384"
+  orog_files_input_grid="C384.mx025_oro_data.tile1.nc","C384.mx025_oro_data.tile2.nc","C384.mx025_oro_data.tile3.nc","C384.mx025_oro_data.tile4.nc","C384.mx025_oro_data.tile5.nc","C384.mx025_oro_data.tile6.nc"
+  data_dir_input_grid="/scratch4/NCEPDEV/marine/Alexander.Hrabski/IC/cp4.03-parallel-3dvar/gdas.20260126/18/model/atmos/restart"
+  atm_core_files_input_grid="20260127.000000.fv_core.res.tile1.nc","20260127.000000.fv_core.res.tile2.nc","20260127.000000.fv_core.res.tile3.nc","20260127.000000.fv_core.res.tile4.nc","20260127.000000.fv_core.res.tile5.nc","20260127.000000.fv_core.res.tile6.nc","20260127.000000.fv_core.res.nc"
+  atm_tracer_files_input_grid="20260127.000000.fv_tracer.res.tile1.nc","20260127.000000.fv_tracer.res.tile2.nc","20260127.000000.fv_tracer.res.tile3.nc","20260127.000000.fv_tracer.res.tile4.nc","20260127.000000.fv_tracer.res.tile5.nc","20260127.000000.fv_tracer.res.tile6.nc"
+  sfc_files_input_grid="20260127.000000.sfc_data.tile1.nc","20260127.000000.sfc_data.tile2.nc","20260127.000000.sfc_data.tile3.nc","20260127.000000.sfc_data.tile4.nc","20260127.000000.sfc_data.tile5.nc","20260127.000000.sfc_data.tile6.nc"
+
+  ! Target: the 8 km run's grid, orography and surface climatology (the same files
+  ! marine3dvar.yaml adds to the fix tree), on the model's 128 levels
+  mosaic_file_target_grid="/scratch4/NCEPDEV/marine/Alexander.Hrabski/FIX_highres_mom6_cic6/OROG/C384/C384_mosaic.nc"
+  orog_dir_target_grid="/scratch4/NCEPDEV/marine/Alexander.Hrabski/FIX_highres_mom6_cic6/OROG/C384"
+  orog_files_target_grid="C384.mx008_oro_data.tile1.nc","C384.mx008_oro_data.tile2.nc","C384.mx008_oro_data.tile3.nc","C384.mx008_oro_data.tile4.nc","C384.mx008_oro_data.tile5.nc","C384.mx008_oro_data.tile6.nc"
+  fix_dir_target_grid="/scratch4/NCEPDEV/marine/Alexander.Hrabski/FIX_highres_mom6_cic6/OROG/C384/sfc"
+  vcoord_file_target_grid="/scratch3/NCEPDEV/global/role.glopara/fix/am/20220805/global_hyblev.l128.txt"
+
+  ! Valid time of the restarts; picks the climatology months
+  cycle_year=2026
+  cycle_mon=1
+  cycle_day=27
+  cycle_hour=0
+
+  convert_atm=.true.
+  convert_sfc=.true.
+  convert_nst=.true.
+
+  ! Every tracer in field_table_thompson_noaero_tke_progsigma, so that nothing
+  ! starts from zero. Each name must be in the fv_tracer.res files; check with
+  ! ncdump -h before running.
+  tracers_input="sphum","liq_wat","ice_wat","rainwat","snowwat","graupel","ice_nc","rain_nc","o3mr","sgs_tke","sigmab"
+  tracers="sphum","liq_wat","ice_wat","rainwat","snowwat","graupel","ice_nc","rain_nc","o3mr","sgs_tke","sigmab"
+
+  ! Vegetation and soil types, vegetation fraction and LAI from the 8 km
+  ! climatology (chgres_cube's defaults, spelled out)
+  vgtyp_from_climo=.true.
+  sotyp_from_climo=.true.
+  vgfrc_from_climo=.true.
+  minmax_vgfrc_from_climo=.true.
+  lai_from_climo=.true.
+  tg3_from_soil=.false.
+  nsoill_out=4
+
+  regional=0
+ /

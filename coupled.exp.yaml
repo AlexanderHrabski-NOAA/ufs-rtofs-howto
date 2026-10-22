@@ -7,7 +7,7 @@ experiment:
   resdetocean: 0.08
   nens: 0
   interval: 0
-  start: warm
+  start: cold
   comroot: {{ 'RUNDIR' | getenv }}/ufs-rtofs/COMROOT
   expdir: {{ 'RUNDIR' | getenv }}/ufs-rtofs/EXPDIR
   idate: 2026012700

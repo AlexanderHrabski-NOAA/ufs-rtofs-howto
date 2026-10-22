@@ -49,7 +49,7 @@ base:
 
 ### IC setup
 
-Next, we will cover the setup of warm start ICs for this workflow. Because this workflow hasn't been run to produce useable ICs for a warm start, we must construct warm start ICs by hand. 
+Next, we will cover the setup of ICs for this workflow. Because this workflow hasn't been run to produce useable ICs for a warm start, we must construct ICs by hand. The experiment starts the atmosphere cold, from ICs converted with `chgres_cube`, while the ocean and ice warm start from restarts (this is why `coupled.exp.yaml` has `start: cold`). The global workflow already supports this mix: the start type only changes how FV3 starts, and the ocean and ice restarts are staged either way.
 
 There are many options for how to do this. Here, I'll outline the procedure I've used to create a suffeciently valid set of ICs such that the first half-cycle of the workflow runs to completion. While creating these ICs were necissary to ensure the workflow would run when a physically consistent set of ICs are provided, this procedure does not produce ICs suitable for science and should be replaced with a better one.
 
@@ -57,7 +57,7 @@ We will take files from two sources:
 - A 25km ocean/ice coupled atmosphere runs (verify exactly what this is)
 - A 8km ocean/ice data atmosphere runs (RTOFS)
 
-The coupled atmosphere (CATM) runs will provide the necissary directory structure and the atmospheric restart files. The data atmosphere (DATM) runs will provide the necissary high-resolution ocean/ice restart files that are not present in the CATM data. I've staged these two sets of restarts in the following directories:
+The coupled atmosphere (CATM) runs will provide the necissary directory structure, the analysis files, and the atmospheric restart files that `chgres_cube` converts. The data atmosphere (DATM) runs will provide the necissary high-resolution ocean/ice restart files that are not present in the CATM data. I've staged these two sets of restarts in the following directories:
 
 On GAEA C6:
 - CATM: `/gpfs/f6/sfs-cpu/world-shared/Alexander.Hrabski/IC/cp4.03-parallel-3dvar`
@@ -67,18 +67,47 @@ On Ursa:
 - CATM: `/scratch4/NCEPDEV/marine/Alexander.Hrabski/IC/cp4.03-parallel-3dvar`
 - DATM: `/scratch4/NCEPDEV/marine/Alexander.Hrabski/IC/rtofs.20251225`
 
-Note that these two sources correspond to different dates. Checks exist within UFS to abort if the needed files have embedded dates that differ from the running cycle. MOM6 has an override that I am currently using to turn these checks off. CICE does not have such an override, so it is necissary to modify the embedded date in the CICE restart file (actually, analysis, see below).
+Note that these two sources correspond to different dates. Checks exist within UFS to abort if the needed files have embedded dates that differ from the running cycle. MOM6 has an override that I am currently using to turn these checks off. CICE does not have such an override, but on a cold start the workflow runs CICE with `runtype = 'initial'` and `use_restart_time = .false.`, so the embedded date is ignored and the file can be used as is. Because there is no IAU on a cold start, the first cycle (2026012700) starts at 00Z rather than 21Z, and the ocean and ice files are named for 00Z.
 
-The ICs must also include analysis files. For now, we take the increment to be zero, and we construct a zero increment file for MOM6 to read. For CICE, the increment is already applied to the restart, so we simply link the analysis file to the restart file to achieve a zero increment.
+The ICs must also include analysis files. For now, we take the increment to be zero, and we construct a zero increment file for MOM6 to read. For CICE, the increment is already applied to the restart, so we simply link the restart file to the analysis file to achieve a zero increment.
 
 Finally, the mediator also has a warm start option, in which it reads a mediator restart file. In this case, neither source of restarts contains a suitable file. The DATM mediator restart is missing coupling fields, and the CATM restart is at to coarse a resolution. As a temporary workaround, we cold start the mediator, which is done automatically if a mediator restart isn't found in the ICs.
 
-The `create_ics.py` script constructs the ICs directly from these two sources according to the above description. It can be called via:
+#### Atmosphere ICs from chgres_cube
+
+The CATM atmospheric restarts can't be used as they are. Their land/sea mask follows the 25 km ocean (`C384.mx025_oro_data`), while this workflow uses the 8 km ocean (`C384.mx008_oro_data`). Along the coast, some cells gain land, or gain a water fraction, that the CATM run never computed a state for, and `global_cycle` aborts with `LAND FRAC AND SLMASK MISMATCH`. Instead, we convert the CATM restarts valid at 2026012700 with `chgres_cube` onto the 8 km run's orography and surface climatology. Its output follows the 8 km mask by construction. These are "cold start" files in FV3's sense, but the state is still the CATM run's: converted and simplified, not un-spun-up. The model rebuilds the physics and Noah-MP state it doesn't carry (aquifer, snow layers, canopy temperatures) during the first cycle.
+
+The namelist is `chgres_cube.nml`. It is set up for Ursa; the comment at its top lists the paths to change on GAEA C6. The tracer list must match the tracers in the CATM restarts, so check it first:
+
+```bash
+ncdump -h /scratch4/NCEPDEV/marine/Alexander.Hrabski/IC/cp4.03-parallel-3dvar/gdas.20260126/18/model/atmos/restart/20260127.000000.fv_tracer.res.tile1.nc | grep float
+```
+
+`chgres_cube` is built with the global workflow (`exec/chgres_cube`) and runs under MPI, so it needs a batch job. From a fresh shell (shown for Ursa; on GAEA C6, load `build.gaeac6.intel` instead):
+
+```bash
+mkdir -p /path/to/IC/chgres-c384-mx008
+cd /path/to/IC/chgres-c384-mx008
+cp /path/to/ufs-rtofs-howto/chgres_cube.nml fort.41
+module use /path/to/global-workflow/sorc/ufs_utils.fd/modulefiles
+module load build.ursa.intelllvm
+sbatch -A marine-cpu -t 00:30:00 -N 2 --ntasks-per-node=24 -J chgres_c384 -o chgres.%j.log \
+    --wrap "srun /path/to/global-workflow/exec/chgres_cube"
+```
+
+`chgres_cube` reads `fort.41` from the directory it runs in, and writes `gfs_ctrl.nc`, `out.atm.tile{1..6}.nc` and `out.sfc.tile{1..6}.nc` there. A successful run ends its log with `- DONE.` It also checks that the CATM restarts agree with the 25 km orography, and stops with `INCONSISTENT LAND/SEA MASK BETWEEN RESTART AND OROG FILES` if the input orography doesn't match them.
+
+#### Building the ICs
+
+The `create_ics.sh` script constructs the ICs directly from these sources according to the above description, linking the `chgres_cube` output into the IC tree under the names FV3 reads on a cold start. It can be called via:
 
 ```bash
 source /path/to/global-workflow/dev/ush/load_modules.sh
-./create_ics.sh /path/to/IC/rtofs.20251225 /path/to/IC/cp4.03-parallel-3dvar /path/to/IC/coupled-8km-ics 
+./create_ics.sh /path/to/IC/rtofs.20251225 /path/to/IC/cp4.03-parallel-3dvar /path/to/IC/coupled-8km-ics \
+    /path/to/IC/chgres-c384-mx008
 ```
+
+The IC tree links to the `chgres_cube` output, so keep that directory. At the start of the first forecast, the workflow's land check (`check_land_input_fields.py`, on by default) compares the converted `sfc_data` with the 8 km orography.
 Once this is generated, edit the `coupled.exp.yaml` configuration so that `icdir: /path/to/IC/coupled-8km-ics` points to your prepared initial conditions.
 
 ## Experiment Generation
