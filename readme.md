@@ -1,5 +1,20 @@
 # Build and Prepare a Coupled 3DVar FGAT (C384 Atmosphere + 1/12 Ocean)
 
+## Pre-req: global workflow rc
+
+You may need to populate a `~/.gwrc` with some environment variables, e.g.:
+
+```bash
+# ~/.gwrc - NOAA Global Workflow User Configuration
+
+user:
+  ACCOUNT: marine-cpu
+  HPSS_PROJECT: marine-cpu
+  HOMEDIR: /scratch3/NCEPDEV/stmp/First.Last/ufs-rtofs-howto
+  STMP: /scratch3/NCEPDEV/stmp/First.Last
+  PTMP: /scratch3/NCEPDEV/stmp/first.Last
+```
+
 ## Setup
 
 In order to use this workflow, a series of fix files, ICs, and configuration files must be correctly set up. This repository contains the needed files and utilities to do so. Begin by cloning this repository to the location you would like to keep the experiment configuration and entering it:
@@ -61,7 +76,7 @@ The coupled atmosphere (CATM) runs will provide the necissary directory structur
 
 On GAEA C6:
 - CATM: `/gpfs/f6/sfs-cpu/world-shared/Alexander.Hrabski/IC/cp4.03-parallel-3dvar`
-- DATM: `/gpfs/f6/sfs.cpu/world-shared/Alexander.Hrabski/IC/rtofs.20251225`
+- DATM: `/gpfs/f6/sfs-cpu/world-shared/Alexander.Hrabski/IC/rtofs.20251225`
 
 On Ursa:
 - CATM: `/scratch4/NCEPDEV/marine/Alexander.Hrabski/IC/cp4.03-parallel-3dvar`
